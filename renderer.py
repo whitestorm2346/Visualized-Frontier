@@ -1,4 +1,5 @@
 import pygame
+import math
 from config import (
     SCREEN_WIDTH,
     SCREEN_HEIGHT,
@@ -17,6 +18,8 @@ from config import (
     COLOR_BG,
     SENSOR_RADIUS,
     ROBOT_RADIUS,
+    LIDAR_RAY_COUNT,
+    LIDAR_STEP_SIZE
 )
 
 
@@ -25,7 +28,7 @@ class Renderer:
         self.screen = screen
         self.font = pygame.font.SysFont("consolas", 18)
 
-    def draw(self, occupancy_map, frontiers, robot):
+    def draw(self, occupancy_map, frontiers, robot, world):
         self.screen.fill(COLOR_BG)
 
         camera_x, camera_y = self._get_camera_position(occupancy_map, robot)
@@ -52,7 +55,7 @@ class Renderer:
                 pygame.draw.rect(self.screen, color, rect)
                 pygame.draw.rect(self.screen, COLOR_GRID, rect, 1)
 
-        self._draw_sensor_range(robot, camera_x, camera_y)
+        self._draw_sensor_range(robot, camera_x, camera_y, world)
         self._draw_robot(robot, camera_x, camera_y)
         self._draw_ui(robot, len(frontiers))
 
@@ -89,15 +92,50 @@ class Renderer:
 
         pygame.draw.circle(self.screen, COLOR_ROBOT, (center_x, center_y), radius)
 
-    def _draw_sensor_range(self, robot, camera_x, camera_y):
-        overlay = pygame.Surface((SCREEN_WIDTH, SCREEN_HEIGHT), pygame.SRCALPHA)
+    def _draw_sensor_range(self, robot, camera_x, camera_y, world):
+        origin_x = robot.x
+        origin_y = robot.y
 
-        center_x = int((robot.x - camera_x) * TILE_SIZE)
-        center_y = int((robot.y - camera_y) * TILE_SIZE)
-        radius = SENSOR_RADIUS * TILE_SIZE
+        screen_origin_x = int((origin_x - camera_x) * TILE_SIZE)
+        screen_origin_y = int((origin_y - camera_y) * TILE_SIZE)
 
-        pygame.draw.circle(overlay, COLOR_SENSOR, (center_x, center_y), radius)
-        self.screen.blit(overlay, (0, 0))
+        for i in range(LIDAR_RAY_COUNT):
+            angle = 2 * math.pi * i / LIDAR_RAY_COUNT
+            dx = math.cos(angle)
+            dy = math.sin(angle)
+
+            dist = 0
+            end_x = origin_x
+            end_y = origin_y
+
+            while dist <= SENSOR_RADIUS:
+                x = origin_x + dx * dist
+                y = origin_y + dy * dist
+
+                cell_x = int(x)
+                cell_y = int(y)
+
+                if not world.is_inside(cell_x, cell_y):
+                    break
+
+                end_x = x
+                end_y = y
+
+                if world.is_obstacle(cell_x, cell_y):
+                    break
+
+                dist += LIDAR_STEP_SIZE
+
+            screen_end_x = int((end_x - camera_x) * TILE_SIZE)
+            screen_end_y = int((end_y - camera_y) * TILE_SIZE)
+
+            pygame.draw.line(
+                self.screen,
+                (255, 60, 60),
+                (screen_origin_x, screen_origin_y),
+                (screen_end_x, screen_end_y),
+                2
+            )
 
     def _draw_ui(self, robot, frontier_count):
         lines = [

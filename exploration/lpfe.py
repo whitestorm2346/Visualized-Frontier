@@ -1,149 +1,153 @@
 import math
-
 from collections import deque
+
 from exploration.base import ExplorationPolicy
-from config import UNKNOWN, FREE, OBSTACLE
+from config import UNKNOWN, FREE
 
 
 class LPFEPolicy(ExplorationPolicy):
     def __init__(self):
         self.target = None
-        self.waypoint = None
-        self.arrive_threshold = 0.08
         self.path = None
+        self.waypoint = None
+        self.mode = "ALIGN_CENTER"
 
-        self.blacklist = set()
+        self.arrive_threshold = 0.08
+        self.info_gain_weight = 0.8
 
     def get_action(self, robot, occupancy_map, frontiers, world=None):
         if not frontiers:
-            return 0, 0
-
-        # blacklist 過濾
-        valid_frontiers = [f for f in frontiers if f not in self.blacklist]
-
-        if not valid_frontiers:
-            self.blacklist.clear()
-            valid_frontiers = list(frontiers)
-
-        # target 不存在或失效時重新選 frontier
-        if self.target is None or self.target not in valid_frontiers:
-            self.target = self._select_best_frontier(
-                robot,
-                occupancy_map,
-                valid_frontiers
-            )
-            
-            self.waypoint = None
-
-        path = self._wavefront_path(robot, occupancy_map, self.target[0], self.target[1])
-
-        if path is None or len(path) < 2:
             self.target = None
+            self.path = None
             self.waypoint = None
             return 0, 0
 
-        # 如果目前沒有 waypoint，或已經到達 waypoint，才換下一個 waypoint
-        if self.waypoint is None:
-            next_cell = path[1]
-            self.waypoint = (next_cell[0] + 0.5, next_cell[1] + 0.5)
+        # 只有 target 不存在或失效時，才重新做 wavefront
+        if self.target is None or self.target not in frontiers or self.path is None:
+            distance_map, parent_map = self._build_wavefront_map(robot, occupancy_map)
 
-        wx, wy = self.waypoint
-        dx = wx - robot.x
-        dy = wy - robot.y
-        dist = math.sqrt(dx * dx + dy * dy)
+            self.target = self._select_best_frontier(
+                occupancy_map,
+                frontiers,
+                distance_map
+            )
 
-        if dist < self.arrive_threshold:
+            if self.target is None:
+                self.path = None
+                self.waypoint = None
+                return 0, 0
+
+            self.path = self._reconstruct_path(parent_map, self.target)
             self.waypoint = None
+
+        if self.path is None or len(self.path) < 2:
+            self.target = None
+            self.path = None
+            self.waypoint = None
+            self.mode = "ALIGN_CENTER"
             return 0, 0
 
-        return dx / dist, dy / dist
+        if self.mode == "ALIGN_CENTER":
+            current_cell = robot.grid_pos()
+            cx = current_cell[0] + 0.5
+            cy = current_cell[1] + 0.5
 
-    def _select_best_frontier(self, robot, occupancy_map, frontiers):
-        best_frontier = None
-        best_cost = float("inf")
+            dx = cx - robot.x
+            dy = cy - robot.y
+            dist = math.sqrt(dx * dx + dy * dy)
 
-        for frontier in frontiers:
-            cost = self._calculate_cost(robot, occupancy_map, frontier)
+            if dist > 0.05:
+                return dx / dist, dy / dist
 
-            if cost < best_cost:
-                best_cost = cost
-                best_frontier = frontier
+            self.mode = "MOVE_TO_NEXT"
+            self.waypoint = None
 
-        return best_frontier
+        if self.mode == "MOVE_TO_NEXT":
+            if self.waypoint is None:
+                next_cell = self.path[1]
+                self.waypoint = (next_cell[0] + 0.5, next_cell[1] + 0.5)
 
-    def _calculate_cost(self, robot, occupancy_map, frontier):
-        fx, fy = frontier
+            wx, wy = self.waypoint
+            dx = wx - robot.x
+            dy = wy - robot.y
+            dist = math.sqrt(dx * dx + dy * dy)
 
-        path = self._wavefront_path(robot, occupancy_map, fx, fy)
+            if dist < self.arrive_threshold:
+                self.path.pop(0)
+                self.waypoint = None
+                self.mode = "ALIGN_CENTER"
+                return 0, 0
 
-        if path is None:
-            return float("inf")
+            return dx / dist, dy / dist
 
-        distance_cost = len(path)
-        information_gain = self._information_gain(occupancy_map, fx, fy)
-
-        return distance_cost - 0.8 * information_gain
-
-    def _distance_cost(self, robot, fx, fy):
-        target_x = fx + 0.5
-        target_y = fy + 0.5
-
-        dx = target_x - robot.x
-        dy = target_y - robot.y
-
-        return math.sqrt(dx * dx + dy * dy)
-    
-    def _wavefront_path(self, robot, occupancy_map, goal_x, goal_y):
+    def _build_wavefront_map(self, robot, occupancy_map):
         start_x, start_y = robot.grid_pos()
 
-        queue = deque()
-        visited = set()
-        parent = {}
+        distance_map = [
+            [float("inf") for _ in range(occupancy_map.width)]
+            for _ in range(occupancy_map.height)
+        ]
 
+        parent_map = {}
+
+        queue = deque()
         queue.append((start_x, start_y))
-        visited.add((start_x, start_y))
-        parent[(start_x, start_y)] = None
+
+        distance_map[start_y][start_x] = 0
+        parent_map[(start_x, start_y)] = None
 
         while queue:
             x, y = queue.popleft()
-
-            if (x, y) == (goal_x, goal_y):
-                return self._reconstruct_path(parent, (goal_x, goal_y))
 
             for nx, ny in self._get_neighbors_4(x, y):
                 if not occupancy_map.is_inside(nx, ny):
                     continue
 
-                if (nx, ny) in visited:
-                    continue
-
                 if occupancy_map.get_cell(nx, ny) != FREE:
                     continue
 
-                visited.add((nx, ny))
-                parent[(nx, ny)] = (x, y)
+                if distance_map[ny][nx] != float("inf"):
+                    continue
+
+                distance_map[ny][nx] = distance_map[y][x] + 1
+                parent_map[(nx, ny)] = (x, y)
                 queue.append((nx, ny))
 
-        return None
-    
-    def _reconstruct_path(self, parent, goal):
+        return distance_map, parent_map
+
+    def _select_best_frontier(self, occupancy_map, frontiers, distance_map):
+        best_frontier = None
+        best_cost = float("inf")
+
+        for fx, fy in frontiers:
+            distance_cost = distance_map[fy][fx]
+
+            if distance_cost == float("inf"):
+                continue
+
+            information_gain = self._information_gain(occupancy_map, fx, fy)
+
+            cost = distance_cost - self.info_gain_weight * information_gain
+
+            if cost < best_cost:
+                best_cost = cost
+                best_frontier = (fx, fy)
+
+        return best_frontier
+
+    def _reconstruct_path(self, parent_map, goal):
+        if goal not in parent_map:
+            return None
+
         path = []
         current = goal
 
         while current is not None:
             path.append(current)
-            current = parent[current]
+            current = parent_map[current]
 
         path.reverse()
         return path
-    
-    def _get_neighbors_4(self, x, y):
-        return [
-            (x + 1, y),
-            (x - 1, y),
-            (x, y + 1),
-            (x, y - 1),
-        ]
 
     def _information_gain(self, occupancy_map, fx, fy, radius=4):
         gain = 0
@@ -163,3 +167,11 @@ class LPFEPolicy(ExplorationPolicy):
                     gain += 1
 
         return gain
+
+    def _get_neighbors_4(self, x, y):
+        return [
+            (x + 1, y),
+            (x - 1, y),
+            (x, y + 1),
+            (x, y - 1),
+        ]

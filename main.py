@@ -13,21 +13,6 @@ from exploration.manual import ManualPolicy
 from exploration.random_walk import RandomWalkPolicy
 
 
-def handle_movement(keys, robot, world, dt):
-    dx, dy = 0, 0
-
-    if keys[pygame.K_w] or keys[pygame.K_UP]:
-        dy -= 1
-    if keys[pygame.K_s] or keys[pygame.K_DOWN]:
-        dy += 1
-    if keys[pygame.K_a] or keys[pygame.K_LEFT]:
-        dx -= 1
-    if keys[pygame.K_d] or keys[pygame.K_RIGHT]:
-        dx += 1
-
-    robot.try_move(dx, dy, world, dt)
-
-
 def reset_simulation(robot, occupancy_map, world):
     world.regenerate()
     robot.reset()
@@ -39,7 +24,7 @@ def reset_simulation(robot, occupancy_map, world):
         rx, ry = robot.grid_pos()
 
     occupancy_map.reset()
-    occupancy_map.update_by_sensor(world, rx, ry)
+    occupancy_map.update_by_sensor(world, robot.x, robot.y)
 
 
 def create_policy(policy_name):
@@ -86,8 +71,7 @@ def main():
 
     policy = create_policy(args.policy)
 
-    rx, ry = robot.grid_pos()
-    occupancy_map.update_by_sensor(world, rx, ry)
+    occupancy_map.update_by_sensor(world, robot.x, robot.y)
 
     running = True
 
@@ -117,9 +101,9 @@ def main():
 
         new_pos = robot.grid_pos()
         if new_pos != old_pos:
-            occupancy_map.update_by_sensor(world, new_pos[0], new_pos[1])
+            occupancy_map.update_by_sensor(world, robot.x, robot.y)
 
-        renderer.draw(occupancy_map, frontiers, robot)
+        renderer.draw(occupancy_map, frontiers, robot, world)
 
     pygame.quit()
 

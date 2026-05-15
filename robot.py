@@ -16,20 +16,50 @@ class Robot:
     def grid_pos(self):
         return int(self.x), int(self.y)
 
-    def try_move(self, dx, dy, world, dt):
+    def try_move(self, dx, dy, world, dt, max_step=None):
         length = math.sqrt(dx * dx + dy * dy)
         if length == 0:
-            return
+            return False
 
         dx /= length
         dy /= length
 
-        new_x = self.x + dx * ROBOT_SPEED * dt
-        new_y = self.y + dy * ROBOT_SPEED * dt
+        step = ROBOT_SPEED * dt
+
+        if max_step is not None:
+            step = min(step, max_step)
+
+        move_x = dx * step
+        move_y = dy * step
+
+        # 1. 先嘗試完整移動
+        new_x = self.x + move_x
+        new_y = self.y + move_y
 
         if not self._collides_with_obstacle(new_x, new_y, world):
             self.x = new_x
             self.y = new_y
+            return True
+
+        moved = False
+
+        # 2. 如果完整移動撞牆，嘗試只沿 X 軸滑動
+        new_x = self.x + move_x
+        new_y = self.y
+
+        if not self._collides_with_obstacle(new_x, new_y, world):
+            self.x = new_x
+            moved = True
+
+        # 3. 再嘗試只沿 Y 軸滑動
+        new_x = self.x
+        new_y = self.y + move_y
+
+        if not self._collides_with_obstacle(new_x, new_y, world):
+            self.y = new_y
+            moved = True
+
+        return moved
 
     def _collides_with_obstacle(self, x, y, world):
         left = int(math.floor(x - ROBOT_RADIUS))

@@ -1,5 +1,5 @@
 import math
-from config import UNKNOWN, FREE, OBSTACLE, SENSOR_RADIUS
+from config import UNKNOWN, FREE, OBSTACLE, SENSOR_RADIUS, LIDAR_RAY_COUNT, LIDAR_STEP_SIZE
 
 
 class OccupancyMap:
@@ -31,19 +31,32 @@ class OccupancyMap:
             self.grid[y][x] = value
 
     def update_by_sensor(self, world, robot_x, robot_y, radius=SENSOR_RADIUS):
-        """用簡化版圓形感測範圍更新 occupancy map。
+        # robot_x / robot_y 可以是格子座標或連續座標
+        origin_x = robot_x
+        origin_y = robot_y
 
-        這裡沒有做 ray casting，所以可以理解成：
-        robot 在半徑範圍內可以直接觀察到真實格子狀態。
-        如果你之後想更接近 LiDAR，可以把這裡改成 ray casting。
-        """
-        for dy in range(-radius, radius + 1):
-            for dx in range(-radius, radius + 1):
-                nx = robot_x + dx
-                ny = robot_y + dy
+        for i in range(LIDAR_RAY_COUNT):
+            angle = 2 * math.pi * i / LIDAR_RAY_COUNT
+            dx = math.cos(angle)
+            dy = math.sin(angle)
 
-                if not self.is_inside(nx, ny):
-                    continue
+            dist = 0
 
-                if math.sqrt(dx * dx + dy * dy) <= radius:
-                    self.grid[ny][nx] = world.get_cell(nx, ny)
+            while dist <= radius:
+                x = origin_x + dx * dist
+                y = origin_y + dy * dist
+
+                cell_x = int(x)
+                cell_y = int(y)
+
+                if not self.is_inside(cell_x, cell_y):
+                    break
+
+                world_cell = world.get_cell(cell_x, cell_y)
+                self.grid[cell_y][cell_x] = world_cell
+
+                # 打到牆就停止，不繼續看牆後面
+                if world.is_obstacle(cell_x, cell_y):
+                    break
+
+                dist += LIDAR_STEP_SIZE
