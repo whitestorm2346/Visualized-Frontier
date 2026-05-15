@@ -8,32 +8,33 @@ from renderer import Renderer
 from frontier import detect_frontiers
 
 
-def handle_movement(keys, robot, world):
+def handle_movement(keys, robot, world, dt):
     dx, dy = 0, 0
 
     if keys[pygame.K_w] or keys[pygame.K_UP]:
-        dy = -1
-    elif keys[pygame.K_s] or keys[pygame.K_DOWN]:
-        dy = 1
-    elif keys[pygame.K_a] or keys[pygame.K_LEFT]:
-        dx = -1
-    elif keys[pygame.K_d] or keys[pygame.K_RIGHT]:
-        dx = 1
+        dy -= 1
+    if keys[pygame.K_s] or keys[pygame.K_DOWN]:
+        dy += 1
+    if keys[pygame.K_a] or keys[pygame.K_LEFT]:
+        dx -= 1
+    if keys[pygame.K_d] or keys[pygame.K_RIGHT]:
+        dx += 1
 
-    if dx != 0 or dy != 0:
-        robot.try_move(dx, dy, world)
+    robot.try_move(dx, dy, world, dt)
 
 
 def reset_simulation(robot, occupancy_map, world):
     world.regenerate()
     robot.reset()
 
-    # 避免新地圖剛好把起點變成障礙物
-    while world.is_obstacle(robot.x, robot.y):
+    rx, ry = robot.grid_pos()
+
+    while world.is_obstacle(rx, ry):
         world.regenerate()
+        rx, ry = robot.grid_pos()
 
     occupancy_map.reset()
-    occupancy_map.update_by_sensor(world, robot.x, robot.y)
+    occupancy_map.update_by_sensor(world, rx, ry)
 
 
 def main():
@@ -49,14 +50,13 @@ def main():
     robot = Robot()
     renderer = Renderer(screen)
 
-    occupancy_map.update_by_sensor(world, robot.x, robot.y)
+    rx, ry = robot.grid_pos()
+    occupancy_map.update_by_sensor(world, rx, ry)
 
     running = True
-    move_cooldown = 0
 
     while running:
-        dt = clock.tick(FPS)
-        move_cooldown -= dt
+        dt = clock.tick(FPS) / 1000
 
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
@@ -70,15 +70,13 @@ def main():
 
         keys = pygame.key.get_pressed()
 
-        # 避免按住按鍵時移動太快
-        if move_cooldown <= 0:
-            old_pos = (robot.x, robot.y)
-            handle_movement(keys, robot, world)
+        old_pos = robot.grid_pos()
 
-            if (robot.x, robot.y) != old_pos:
-                occupancy_map.update_by_sensor(world, robot.x, robot.y)
+        handle_movement(keys, robot, world, dt)
 
-            move_cooldown = 90
+        new_pos = robot.grid_pos()
+        if new_pos != old_pos:
+            occupancy_map.update_by_sensor(world, new_pos[0], new_pos[1])
 
         frontiers = detect_frontiers(occupancy_map)
         renderer.draw(occupancy_map, frontiers, robot)

@@ -16,6 +16,7 @@ from config import (
     COLOR_TEXT,
     COLOR_BG,
     SENSOR_RADIUS,
+    ROBOT_RADIUS,
 )
 
 
@@ -31,8 +32,8 @@ class Renderer:
         visible_cols = SCREEN_WIDTH // TILE_SIZE + 2
         visible_rows = SCREEN_HEIGHT // TILE_SIZE + 2
 
-        start_x = max(0, camera_x)
-        start_y = max(0, camera_y)
+        start_x = max(0, int(camera_x))
+        start_y = max(0, int(camera_y))
         end_x = min(occupancy_map.width, start_x + visible_cols)
         end_y = min(occupancy_map.height, start_y + visible_rows)
 
@@ -67,12 +68,11 @@ class Renderer:
         return COLOR_UNKNOWN
 
     def _get_camera_position(self, occupancy_map, robot):
-        """讓 robot 盡量保持在視窗中心，除非接近地圖邊緣。"""
         visible_cols = SCREEN_WIDTH // TILE_SIZE
         visible_rows = SCREEN_HEIGHT // TILE_SIZE
 
-        camera_x = robot.x - visible_cols // 2
-        camera_y = robot.y - visible_rows // 2
+        camera_x = robot.x - visible_cols / 2
+        camera_y = robot.y - visible_rows / 2
 
         max_camera_x = max(0, occupancy_map.width - visible_cols)
         max_camera_y = max(0, occupancy_map.height - visible_rows)
@@ -83,17 +83,17 @@ class Renderer:
         return camera_x, camera_y
 
     def _draw_robot(self, robot, camera_x, camera_y):
-        center_x = int((robot.x - camera_x + 0.5) * TILE_SIZE)
-        center_y = int((robot.y - camera_y + 0.5) * TILE_SIZE)
-        radius = TILE_SIZE // 2
+        center_x = int((robot.x - camera_x) * TILE_SIZE)
+        center_y = int((robot.y - camera_y) * TILE_SIZE)
+        radius = int(ROBOT_RADIUS * TILE_SIZE)
 
         pygame.draw.circle(self.screen, COLOR_ROBOT, (center_x, center_y), radius)
 
     def _draw_sensor_range(self, robot, camera_x, camera_y):
         overlay = pygame.Surface((SCREEN_WIDTH, SCREEN_HEIGHT), pygame.SRCALPHA)
 
-        center_x = int((robot.x - camera_x + 0.5) * TILE_SIZE)
-        center_y = int((robot.y - camera_y + 0.5) * TILE_SIZE)
+        center_x = int((robot.x - camera_x) * TILE_SIZE)
+        center_y = int((robot.y - camera_y) * TILE_SIZE)
         radius = SENSOR_RADIUS * TILE_SIZE
 
         pygame.draw.circle(overlay, COLOR_SENSOR, (center_x, center_y), radius)
