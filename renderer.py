@@ -1,6 +1,7 @@
 import pygame
 import math
 from config import (
+    LIDAR_FOV_DEG,
     SCREEN_WIDTH,
     SCREEN_HEIGHT,
     TILE_SIZE,
@@ -95,12 +96,16 @@ class Renderer:
     def _draw_sensor_range(self, robot, camera_x, camera_y, world):
         origin_x = robot.x
         origin_y = robot.y
+        heading = robot.heading
 
         screen_origin_x = int((origin_x - camera_x) * TILE_SIZE)
         screen_origin_y = int((origin_y - camera_y) * TILE_SIZE)
 
         for i in range(LIDAR_RAY_COUNT):
-            angle = 2 * math.pi * i / LIDAR_RAY_COUNT
+            fov_rad = math.radians(LIDAR_FOV_DEG)
+            start_angle = heading - fov_rad / 2
+
+            angle = start_angle + fov_rad * i / (LIDAR_RAY_COUNT - 1)
             dx = math.cos(angle)
             dy = math.sin(angle)
 
@@ -134,7 +139,7 @@ class Renderer:
                 (255, 60, 60),
                 (screen_origin_x, screen_origin_y),
                 (screen_end_x, screen_end_y),
-                2
+                3
             )
 
     def _draw_ui(self, robot, frontier_count):

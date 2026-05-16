@@ -8,6 +8,7 @@ class Robot:
         self.start_y = float(y) + 0.5
         self.x = float(x) + 0.5
         self.y = float(y) + 0.5
+        self.heading = 0.0
 
     def reset(self):
         self.x = self.start_x
@@ -24,6 +25,7 @@ class Robot:
         dx /= length
         dy /= length
 
+        self.heading = math.atan2(dy, dx)
         step = ROBOT_SPEED * dt
 
         if max_step is not None:

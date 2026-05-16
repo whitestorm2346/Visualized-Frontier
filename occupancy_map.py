@@ -1,5 +1,5 @@
 import math
-from config import UNKNOWN, FREE, OBSTACLE, SENSOR_RADIUS, LIDAR_RAY_COUNT, LIDAR_STEP_SIZE
+from config import LIDAR_FOV_DEG, UNKNOWN, FREE, OBSTACLE, SENSOR_RADIUS, LIDAR_RAY_COUNT, LIDAR_STEP_SIZE
 
 
 class OccupancyMap:
@@ -30,13 +30,17 @@ class OccupancyMap:
         if self.is_inside(x, y):
             self.grid[y][x] = value
 
-    def update_by_sensor(self, world, robot_x, robot_y, radius=SENSOR_RADIUS):
+    def update_by_sensor(self, world, robot, radius=SENSOR_RADIUS):
         # robot_x / robot_y 可以是格子座標或連續座標
-        origin_x = robot_x
-        origin_y = robot_y
+        origin_x = robot.x
+        origin_y = robot.y
+        heading = robot.heading
 
         for i in range(LIDAR_RAY_COUNT):
-            angle = 2 * math.pi * i / LIDAR_RAY_COUNT
+            fov_rad = math.radians(LIDAR_FOV_DEG)
+            start_angle = heading - fov_rad / 2
+
+            angle = start_angle + fov_rad * i / (LIDAR_RAY_COUNT - 1)
             dx = math.cos(angle)
             dy = math.sin(angle)
 

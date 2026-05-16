@@ -24,7 +24,7 @@ def reset_simulation(robot, occupancy_map, world):
         rx, ry = robot.grid_pos()
 
     occupancy_map.reset()
-    occupancy_map.update_by_sensor(world, robot.x, robot.y)
+    occupancy_map.update_by_sensor(world, robot)
 
 
 def create_policy(policy_name):
@@ -71,7 +71,7 @@ def main():
 
     policy = create_policy(args.policy)
 
-    occupancy_map.update_by_sensor(world, robot.x, robot.y)
+    occupancy_map.update_by_sensor(world, robot)
 
     running = True
 
@@ -101,7 +101,7 @@ def main():
 
         new_pos = robot.grid_pos()
         if new_pos != old_pos:
-            occupancy_map.update_by_sensor(world, robot.x, robot.y)
+            occupancy_map.update_by_sensor(world, robot)
 
         renderer.draw(occupancy_map, frontiers, robot, world)
 
