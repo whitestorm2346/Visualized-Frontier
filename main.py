@@ -9,11 +9,14 @@ from robot import Robot
 from renderer import Renderer
 from frontier import detect_frontiers
 
+from navigation.navigator import Navigator
+
 from exploration.manual import ManualPolicy
 from exploration.random_walk import RandomWalkPolicy
+from exploration.next_best_view import NextBestViewPolicy
 
 
-def reset_simulation(robot, occupancy_map, world):
+def reset_simulation(robot, occupancy_map, world, navigator):
     world.regenerate()
     robot.reset()
 
@@ -26,6 +29,8 @@ def reset_simulation(robot, occupancy_map, world):
     occupancy_map.reset()
     occupancy_map.update_by_sensor(world, robot)
 
+    navigator.reset()
+
 
 def create_policy(policy_name):
     if policy_name == "manual":
@@ -36,6 +41,9 @@ def create_policy(policy_name):
     
     if policy_name == "lpfe":
         return LPFEPolicy()
+    
+    if policy_name == "nbv":
+        return NextBestViewPolicy()
 
     raise ValueError(f"Unknown policy: {policy_name}")
 
@@ -46,7 +54,7 @@ def parse_args():
     parser.add_argument(
         "-p",
         "--policy",
-        choices=["manual", "random", "lpfe"],
+        choices=["manual", "random", "lpfe", "nbv"],
         default="manual",
         help="Choose exploration policy"
     )
@@ -70,6 +78,7 @@ def main():
     renderer = Renderer(screen)
 
     policy = create_policy(args.policy)
+    navigator = Navigator()
 
     occupancy_map.update_by_sensor(world, robot)
 
@@ -86,7 +95,7 @@ def main():
                 if event.key == pygame.K_ESCAPE:
                     running = False
                 elif event.key == pygame.K_r:
-                    reset_simulation(robot, occupancy_map, world)
+                    reset_simulation(robot, occupancy_map, world, navigator)
 
         keys = pygame.key.get_pressed()
         frontiers = detect_frontiers(occupancy_map)
@@ -94,7 +103,24 @@ def main():
         if hasattr(policy, "update_keys"):
             policy.update_keys(keys)
 
-        dx, dy = policy.get_action(robot, occupancy_map, frontiers, world)
+        action = policy.get_action(robot, occupancy_map, frontiers, world)
+
+        if isinstance(action, dict) and action["type"] == "target":
+            dx, dy, stuck = navigator.navigate_to(
+                robot,
+                occupancy_map,
+                action["target"]
+            )
+
+            if stuck and hasattr(policy, "on_stuck"):
+                policy.on_stuck(action["target"])
+
+        elif isinstance(action, dict) and action["type"] == "velocity":
+            dx = action["dx"]
+            dy = action["dy"]
+
+        else:
+            dx, dy = action
 
         old_pos = robot.grid_pos()
         robot.try_move(dx, dy, world, dt)
